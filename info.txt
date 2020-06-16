@@ -1,0 +1,76 @@
+azure cli:
+  az
+  az interactive
+  az login
+  az account list
+  az account set -s  "29ca1c13-eee4-43a6-be9a-f49a867f2d88"
+  az cosmosdb collection create --collection-name mycollection -d mydatabase -otable
+  az group list -o table
+  az account show  --query name
+  az account show  --query "{Namo:name,statto:state}"
+  az group list --query "[].name"
+  az group list --query "[].{Name:name, Location:location, Propo: properties.provisioningState}"
+  az group list --query "[?name=='DataFactory'].location"
+  az group list --query "[?name=='DataFactory'].location" -o tsv : will get jst value of the location prop
+  come-out: ctrl+d
+
+  AZ-VM:
+    az vm -h 
+    az vm image list -o table
+    az vm image list --all -f elasticsearch -o table : offers elastic search
+    Create resource group and VM:
+      $ResourceGroupName="CreateVmDemo"
+      az group create --name $ResourceGroupName --location westeurope (az will use this location by default for all resources)
+      az vm create -h | more
+      $VmName = "ExampleVm"
+      $AdminPassword="Password@12345"
+      az vm create --resource-group $ResourceGroupName --name $VmName --image win2016datacenter --admin-username azureuser --admin-password $AdminPassword
+    Delete resource group:
+      az group delete --name $ResourceGroupName --yes
+
+  AZ-Storage-Account:
+    Can Have:
+      Blobs
+      Files
+      Queues
+      Tables
+    Create resource group and storage account:
+      $resourceGroup="resourceGroup1" 
+      $location="westeurope"
+      $storageAccount="mustbeuniquelikeguid"
+      az group create -n $resourceGroup -l $location
+      az storage account create -n $storageAccount -g $resourceGroup -l $location --sku Standard_LRS
+    Show connection string:
+      $connectionString=az storage account show-connection-string -n $storageAccount -g $resourceGroup --query connectionString -o tsv
+      Create Public container:
+        az storage container create -n "public" --public-access blob --connection-string $connectionString
+      Create Private container:
+        $env:AZURE_STORAGE_CONNECTION_STRING = $connectionString
+        az storage container create -n "private" --public-access off [4:3 time 3.20]
+      Craete File and upload to container:
+        Upload to Public container:
+          echo "hello worlddd" > example.txt
+          cat example.txt
+          az storage blob upload -c "public" -f "example.txt" -n "nameinblob.txt"  (-c : container, -f: name of file, -n : name in blob)
+          az storage blob url -c "public" -n "nameinblob.txt" -o tsv : gives url to download
+        Upload to Private container (SAS token shared access signature token):
+          $blobName="secret/private.txt"
+          az storage blob upload -c "private" -f "example.txt" -n $blobName -o tsv
+          az storage blob url -c "private" -n $blobName -o tsv
+          az storage blob generate-sas -c "private" -n $blobName --permissions r -o tsv --expiry 2020-06-17T13:24Z 
+            (https://mustbeuniquelikeguid.blob.core.windows.net/private/secret/private.txt?se=2020-06-17T13%3A24Z&sp=r&sv=2018-03-28&sr=b&sig=qvaBApTITXR4OBPGgddJWoK3y7KNNgst061JtkqJIVk%3D)
+          
+
+
+
+  Nano:
+    open terminal on portal
+    ls 
+    cd clouddrive
+    nano myscript.sh
+      ctrl+x
+      y(for save) 
+      ./myscript.sh
+
+Help-Source:
+  https://jmespath.org/tutorial.html
