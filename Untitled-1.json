@@ -1,0 +1,5 @@
+$resourceGroup="SQLBackUpResourceGroup" 
+$location="westeurope"
+$storageAccount="sqlbackupstorageacc"
+az group create -n $resourceGroup -l $location
+az storage account create -n $storageAccount -g $resourceGroup -l $location --sku Standard_LRS

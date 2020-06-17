@@ -60,7 +60,80 @@ azure cli:
           az storage blob generate-sas -c "private" -n $blobName --permissions r -o tsv --expiry 2020-06-17T13:24Z 
             (https://mustbeuniquelikeguid.blob.core.windows.net/private/secret/private.txt?se=2020-06-17T13%3A24Z&sp=r&sv=2018-03-28&sr=b&sig=qvaBApTITXR4OBPGgddJWoK3y7KNNgst061JtkqJIVk%3D)
           
+  AZ-Storage:
+    Account:
+      Container:
+        Blob:
+        Table:
+          $tableName="mytable"
+          az storage table create -n $tableName --account-name mustbeuniquelikeguid (schema-less table)
+          az storage entity insert --account-name mustbeuniquelikeguid -t $tableName -e PartitionKey="Settings" RowKey="TimeOut" Value=10 Description="Timeout in seconds"
+          az storage entity insert --account-name mustbeuniquelikeguid -t $tableName -e PartitionKey="Settings" RowKey="MaxRetries" Value=4 Description="Max Retry" 
+          az storage entity query -t $tableName --account-name mustbeuniquelikeguid
+          az storage entity query -t $tableName --account-name mustbeuniquelikeguid --filter "PartitionKey eq 'Settings'"
+          replace/update value:
+            replace:
+              az storage entity replace -t $tableName --account-name mustbeuniquelikeguid -e PartitionKey="Settings" RowKey="MaxRetries" value=5 Description="Updated Retries"
+            mergr:
+              az storage entity merge -t $tableName --account-name mustbeuniquelikeguid -e PartitionKey="Settings" RowKey="MaxRetries" value=90 Description="Updated Retries"
+          Show:
+            az storage entity show -t $tableName --account-name mustbeuniquelikeguid --partition-key "Settings" --row-key "MaxRetries"
+  
+  WebAppAndSqlServer:
+    WebApp:
+      Create Resource Group:
+        $resourceGroup="CliWebAppDemo" 
+        $location="westeurope"
+        az group create -n $resourceGroup -l $location 
+      Create App Service plan:
+        $planName="CliWebAppDemo"
+        az appservice plan create -n $planName -g $resourceGroup --sku B1
+      Create web app:
+        $appName="hidbdemowithvatan"
+        az webapp create -n $appName -g $resourceGroup --plan $planName
+      Deploy code from git:
+        $gitrepo="https://github.com/vatansoni89/DemoAZCLI.git"
+        az webapp deployment source config -n $appName -g $resourceGroup --repo-url $gitrepo --branch master --manual-integration (it will build and deploy)
+      Sync latest code from git and deploy again:
+        az webapp deployment source sync -n $appName -g $resourceGroup
+    SqlServerAndDB:
+      $sqlServerName="cliwebappdemodbserver"
+      $sqlServerUsername="vatan"
+      $sqlServerPassword='!MeraPasswordq@1'
+      az sql server create -n $sqlServerName -g $resourceGroup -l $location -u $sqlServerUsername -p $sqlServerPassword
+      DB:
+        $databaseName="SnippetsDatabase"
+        ##az sql db list-editions -l $location -o table
+        az sql db create -g $resourceGroup -s $sqlServerName -n $databaseName --service-objective Basic
+      Connecting Web-App to SQL DB:
+        Firewall:
+          $firewallRuleName="AllowWebApp1"
+          ##az webapp show -n $appName -g $resourceGroup --query "outboundIpAddresses" -o tsv
+          az sql server firewall-rule create -g $resourceGroup -s $sqlServerName -n $firewallRuleName --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 (allow any traffic coming WITHIN AZURE)
+        UpdateWebAppSettings:
+          $connectionString="Server=tcp:$sqlServerName.database.windows.net;Database=$databaseName;User ID=$sqlServerUsername@$sqlServerName;Password=$sqlServerPassword;Trusted_Connection=False;Encrypt=True;"
+          az webapp config connection-string set -n $appName -g $resourceGroup --settings "SnippetsContext=$connectionString" --connection-string-type SQLAzure
+      Backup-Restore:
+        Backup:
+          $resourceGroup="SQLBackUpResourceGroup" 
+          $location="westeurope"
+          $storageAccount="sqlbackupstorageacc"
+          az group create -n $resourceGroup -l $location
+          az storage account create -n $storageAccount -g $resourceGroup -l $location --sku Standard_LRS
+          $storageConnectionString= az storage account show-connection-string -n $storageAccount -g $resourceGroup  --query connectionString -o tsv
+          ##$storageKey="FQu27bojrXD57leidvtAXpB4afFDvsSdhgyvMGr2xuBNo/gsayeHrwc3M8bi1HyAeG5bCWhrtJ0WoA/kMTACpw=="
+          $now = (get-date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffffffZ")
+          $backupFileName="backup-$now.bacpac"
+          az sql db export -s $sqlServerName -n $databaseName -g $resourceGroup -u $sqlServerUsername -p $sqlServerPassword --storage-key-type StorageAccessKey --storage-key $storageKey --storage-uri "https://$storageAccount.blob.core.windows.net/bacpacs/$backupFileName"
+        Restore:
+          ##Restore the bacpac to an empty db always
+          $databaseName2="SnippetsDatabase2"
+          az sql db create -g $resourceGroup -s $sqlServerName -n $databaseName2 --service-objective Basic
+          az sql db import -s $sqlServerName -n $databaseName2 -g $resourceGroup -u $sqlServerUsername -p $sqlServerPassword --storage-key-type StorageAccessKey --storage-key $storageKey --storage-uri "https://$storageAccount.blob.core.windows.net/bacpacs/$backupFileName"
+          $connectionString2="Server=tcp:$sqlServerName.database.windows.net;Database=$databaseName2;User ID=$sqlServerUsername@$sqlServerName;Password=$sqlServerPassword;Trusted_Connection=False;Encrypt=True;"
+          az webapp config connection-string set -n $appName -g $resourceGroup --settings "SnippetsContext=$connectionString2" --connection-string-type SQLAzure
 
+  
 
 
   Nano:
@@ -74,3 +147,14 @@ azure cli:
 
 Help-Source:
   https://jmespath.org/tutorial.html
+  Query:
+    https://docs.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities
+  App Service plan:
+    In App Service, an app runs in an App Service plan. An App Service plan defines a set of compute resources for a web app to run. These compute resources are analogous to the server farm in conventional web hosting. 
+    One or more apps can be configured to run on the same computing resources (or in the same App Service plan).
+    When you create an App Service plan in a certain region (for example, West Europe), a set of compute resources is created for that plan in that region. Whatever apps you put into this App Service plan run on these compute resources as defined by your App Service plan. 
+    Each App Service plan defines:
+      Region (West US, East US, etc.)
+      Number of VM instances
+      Size of VM instances (Small, Medium, Large)
+      Pricing tier (Free, Shared, Basic, Standard, Premium, PremiumV2, Isolated)  
